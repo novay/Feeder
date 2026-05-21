@@ -3,7 +3,7 @@
 namespace Novay\Feeder\Testing;
 
 use Closure;
-use Novay\Feeder\Exceptions\FeederException;
+use Novay\Feeder\Exceptions\FeederResponseException;
 
 class FeederFake
 {
@@ -55,8 +55,10 @@ class FeederFake
             }
         }
 
-        throw new FeederException(
-            message: "Fake response untuk act [{$act}] pada connection [{$connection}] belum didefinisikan."
+        throw new FeederResponseException(
+            message: "Fake response untuk act [{$act}] pada connection [{$connection}] belum didefinisikan.",
+            connection: $connection,
+            act: $act,
         );
     }
 

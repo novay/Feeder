@@ -8,7 +8,7 @@ use Throwable;
 
 class FeederClearTokenCommand extends Command
 {
-    protected $signature = 'feeder:clear-token 
+    protected $signature = 'feeder:clear-token
                             {--connection= : Feeder connection name}';
 
     protected $description = 'Clear cached Feeder token.';

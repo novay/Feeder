@@ -11,21 +11,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Shared Token Defaults
+    | Token Defaults
     |--------------------------------------------------------------------------
-    |
-    | {connection} akan otomatis diganti menjadi nama connection.
-    | Contoh:
-    | feeder:live:token
-    | feeder:sandbox:token
-    |
     */
 
     'token' => [
         'cache_key' => env('FEEDER_TOKEN_CACHE_KEY', 'feeder:{connection}:token'),
+
+        // Digunakan bila token JWT tidak memiliki klaim exp.
         'ttl' => (int) env('FEEDER_TOKEN_TTL', 3600),
+
+        // Token dianggap hampir kedaluwarsa sekian detik sebelum exp.
         'leeway' => (int) env('FEEDER_TOKEN_LEEWAY', 60),
 
+        // Mencegah request paralel mengambil token baru bersamaan.
         'lock_key' => env('FEEDER_TOKEN_LOCK_KEY', 'feeder:{connection}:token:lock'),
         'lock_seconds' => (int) env('FEEDER_TOKEN_LOCK_SECONDS', 10),
         'lock_wait_seconds' => (int) env('FEEDER_TOKEN_LOCK_WAIT_SECONDS', 5),
@@ -33,17 +32,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Shared HTTP Defaults
+    | HTTP Defaults
     |--------------------------------------------------------------------------
     */
 
     'http' => [
         'timeout' => (int) env('FEEDER_TIMEOUT', 30),
         'connect_timeout' => (int) env('FEEDER_CONNECT_TIMEOUT', 10),
+
+        // Feeder umumnya memakai application/x-www-form-urlencoded.
         'as_form' => env('FEEDER_AS_FORM', true),
 
         'retry' => [
             'times' => (int) env('FEEDER_RETRY_TIMES', 2),
+
+            // Dalam milidetik.
             'sleep' => (int) env('FEEDER_RETRY_SLEEP', 300),
         ],
     ],
@@ -97,21 +100,20 @@ return [
 
             /*
             |--------------------------------------------------------------------------
-            | Optional Override
+            | Optional Per-Connection Override
             |--------------------------------------------------------------------------
             |
-            | Bagian ini opsional. Jika tidak diisi, sandbox akan memakai default
-            | dari konfigurasi global di atas.
+            | Contoh:
+            |
+            | 'http' => [
+            |     'timeout' => 60,
+            | ],
+            |
+            | 'token' => [
+            |     'cache_key' => 'feeder:sandbox:token',
+            | ],
             |
             */
-
-            // 'token' => [
-            //     'cache_key' => 'feeder:sandbox:token',
-            // ],
-
-            // 'http' => [
-            //     'timeout' => 60,
-            // ],
         ],
     ],
 ];

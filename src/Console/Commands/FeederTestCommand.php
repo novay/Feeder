@@ -9,7 +9,7 @@ use Throwable;
 
 class FeederTestCommand extends Command
 {
-    protected $signature = 'feeder:test 
+    protected $signature = 'feeder:test
                             {--connection= : Feeder connection name}
                             {--act=GetProfilPT : Feeder act to test}';
 
@@ -20,11 +20,11 @@ class FeederTestCommand extends Command
         $connection = $this->option('connection');
         $act = (string) $this->option('act');
 
-        $client = $feeder->connection($connection ?: null);
-
         $this->components->info('Testing Feeder connection...');
 
         try {
+            $client = $feeder->connection($connection ?: null);
+
             $this->components->twoColumnDetail('Connection', $client->getConnectionName());
 
             $token = $client->token();

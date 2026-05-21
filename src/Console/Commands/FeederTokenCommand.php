@@ -8,7 +8,7 @@ use Throwable;
 
 class FeederTokenCommand extends Command
 {
-    protected $signature = 'feeder:token 
+    protected $signature = 'feeder:token
                             {--connection= : Feeder connection name}
                             {--force : Force refresh token}';
 

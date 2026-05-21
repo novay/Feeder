@@ -3,6 +3,7 @@
 namespace Novay\Feeder;
 
 use Closure;
+use Novay\Feeder\Exceptions\FeederConnectionException;
 use Novay\Feeder\Exceptions\FeederException;
 use Novay\Feeder\Testing\FeederFake;
 
@@ -179,8 +180,9 @@ class FeederManager
         $connection = config("feeder.connections.{$name}");
 
         if (! is_array($connection)) {
-            throw new FeederException(
-                message: "Feeder connection [{$name}] tidak ditemukan."
+            throw new FeederConnectionException(
+                message: "Feeder connection [{$name}] tidak ditemukan.",
+                connection: $name,
             );
         }
 

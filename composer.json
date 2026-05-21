@@ -1,6 +1,6 @@
 {
     "name": "novay/feeder",
-    "description": "Laravel client for Feeder API with automatic token caching, refresh, retry, safe logging, Artisan commands, multi connection, and testing fake.",
+    "description": "Laravel client for Feeder API with automatic token caching, refresh, retry, safe logging, Artisan commands, multi connection, testing fake, and typed exceptions.",
     "type": "library",
     "license": "MIT",
     "autoload": {
