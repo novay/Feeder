@@ -421,6 +421,110 @@ php artisan feeder:clear-token --connection=live
 
 ---
 
+## Testing Fake
+
+You may fake Feeder responses during tests:
+
+```php
+use Novay\Feeder\Facades\Feeder;
+
+Feeder::fake([
+    'GetProfilPT' => [
+        'kode_perguruan_tinggi' => '123456',
+        'nama_perguruan_tinggi' => 'STIKES Mutiara Mahakam Samarinda',
+    ],
+]);
+
+$profil = Feeder::post('GetProfilPT');
+
+expect($profil['nama_perguruan_tinggi'])
+    ->toBe('STIKES Mutiara Mahakam Samarinda');
+
+Feeder::assertSent('GetProfilPT');
+```
+
+### Fake Full Response
+
+```php
+Feeder::fake([
+    'GetProfilPT' => [
+        'error_code' => 0,
+        'error_desc' => '',
+        'data' => [
+            'nama_perguruan_tinggi' => 'STIKES Mutiara Mahakam Samarinda',
+        ],
+    ],
+]);
+```
+
+### Fake With Callback
+
+```php
+Feeder::fake([
+    'GetListMahasiswa' => function (string $act, array $payload, string $connection) {
+        return [
+            [
+                'nim' => '2024001',
+                'nama_mahasiswa' => 'Mahasiswa Demo',
+                'connection' => $connection,
+                'filter' => $payload['filter'] ?? null,
+            ],
+        ];
+    },
+]);
+```
+
+### Assert Payload
+
+```php
+Feeder::assertSent('GetListMahasiswa', function (array $request) {
+    return $request['payload']['limit'] === 10;
+});
+```
+
+### Multi Connection Fake
+
+```php
+Feeder::fake([
+    'live.GetProfilPT' => [
+        'nama_perguruan_tinggi' => 'Kampus Live',
+    ],
+    'sandbox.GetProfilPT' => [
+        'nama_perguruan_tinggi' => 'Kampus Sandbox',
+    ],
+]);
+```
+
+Or:
+
+```php
+Feeder::fakeForConnection('sandbox', [
+    'GetProfilPT' => [
+        'nama_perguruan_tinggi' => 'Kampus Sandbox',
+    ],
+]);
+```
+
+### Assertions
+
+```php
+Feeder::assertSent('GetProfilPT');
+
+Feeder::assertNotSent('GetListMahasiswa');
+
+Feeder::assertSentTimes('GetProfilPT', 1);
+
+Feeder::assertSent('GetProfilPT', connection: 'sandbox');
+```
+
+### Restore Real Client
+
+```php
+Feeder::restoreFake();
+```
+
+---
+
 ## Security Notes
 
 Do not hardcode Feeder username, password, or token inside Livewire components, controllers, or Blade files.

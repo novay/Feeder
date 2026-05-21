@@ -2,16 +2,22 @@
 
 namespace Novay\Feeder;
 
+use Closure;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Novay\Feeder\Exceptions\FeederException;
+use Novay\Feeder\Testing\FeederFake;
 use Throwable;
 
 class FeederClient
 {
+    protected ?FeederFake $fake = null;
+
+    protected array $recordedRequests = [];
+
     public function __construct(
         protected string $connection,
         protected array $config,
@@ -24,6 +30,14 @@ class FeederClient
 
     public function response(string $act, array $payload = []): array
     {
+        if ($this->isFake()) {
+            $response = $this->fakeResponse($act, $payload);
+
+            $this->throwIfFeederError($response);
+
+            return $response;
+        }
+
         $response = $this->sendWithToken($act, $payload);
 
         if ($this->shouldRefreshToken($response)) {
@@ -46,6 +60,10 @@ class FeederClient
 
     public function token(bool $force = false): string
     {
+        if ($this->isFake()) {
+            return "fake-token:{$this->connection}";
+        }
+
         if ($force) {
             $this->clearToken();
         }
@@ -74,6 +92,10 @@ class FeederClient
 
     public function clearToken(): void
     {
+        if ($this->isFake()) {
+            return;
+        }
+
         Cache::forget($this->tokenCacheKey());
 
         $this->logInfo('Feeder cached token cleared.', [
@@ -81,9 +103,106 @@ class FeederClient
         ]);
     }
 
+    public function fake(array|FeederFake $fake = []): static
+    {
+        $this->fake = $fake instanceof FeederFake
+            ? $fake
+            : new FeederFake($fake);
+
+        $this->recordedRequests = [];
+
+        return $this;
+    }
+
+    public function restoreFake(): static
+    {
+        $this->fake = null;
+        $this->recordedRequests = [];
+
+        return $this;
+    }
+
+    public function isFake(): bool
+    {
+        return $this->fake instanceof FeederFake;
+    }
+
+    public function recorded(): array
+    {
+        return $this->recordedRequests;
+    }
+
+    public function assertSent(string $act, ?Closure $callback = null): void
+    {
+        $sent = collect($this->recordedRequests)
+            ->contains(function (array $request) use ($act, $callback) {
+                if ($request['act'] !== $act) {
+                    return false;
+                }
+
+                return $callback ? $callback($request) : true;
+            });
+
+        $this->assertTrue(
+            $sent,
+            "Failed asserting that Feeder act [{$act}] was sent on connection [{$this->connection}]."
+        );
+    }
+
+    public function assertNotSent(string $act, ?Closure $callback = null): void
+    {
+        $sent = collect($this->recordedRequests)
+            ->contains(function (array $request) use ($act, $callback) {
+                if ($request['act'] !== $act) {
+                    return false;
+                }
+
+                return $callback ? $callback($request) : true;
+            });
+
+        $this->assertFalse(
+            $sent,
+            "Failed asserting that Feeder act [{$act}] was not sent on connection [{$this->connection}]."
+        );
+    }
+
+    public function assertSentTimes(string $act, int $times): void
+    {
+        $actual = collect($this->recordedRequests)
+            ->where('act', $act)
+            ->count();
+
+        $this->assertSame(
+            $times,
+            $actual,
+            "Failed asserting that Feeder act [{$act}] was sent {$times} times on connection [{$this->connection}]. Actually sent {$actual} times."
+        );
+    }
+
     public function getConnectionName(): string
     {
         return $this->connection;
+    }
+
+    protected function fakeResponse(string $act, array $payload = []): array
+    {
+        $this->recordFakeRequest($act, $payload);
+
+        return $this->fake->response(
+            connection: $this->connection,
+            act: $act,
+            payload: $payload
+        );
+    }
+
+    protected function recordFakeRequest(string $act, array $payload = []): void
+    {
+        $this->recordedRequests[] = [
+            'connection' => $this->connection,
+            'act' => $act,
+            'payload' => $payload,
+            'recorded_at' => now(),
+        ];
     }
 
     protected function sendWithToken(string $act, array $payload = [], bool $forceNewToken = false): array
@@ -379,6 +498,45 @@ class FeederClient
         }
 
         return $context;
+    }
+
+    protected function assertTrue(bool $condition, string $message): void
+    {
+        if (class_exists(\PHPUnit\Framework\Assert::class)) {
+            \PHPUnit\Framework\Assert::assertTrue($condition, $message);
+
+            return;
+        }
+
+        if (! $condition) {
+            throw new FeederException(message: $message);
+        }
+    }
+
+    protected function assertFalse(bool $condition, string $message): void
+    {
+        if (class_exists(\PHPUnit\Framework\Assert::class)) {
+            \PHPUnit\Framework\Assert::assertFalse($condition, $message);
+
+            return;
+        }
+
+        if ($condition) {
+            throw new FeederException(message: $message);
+        }
+    }
+
+    protected function assertSame(mixed $expected, mixed $actual, string $message): void
+    {
+        if (class_exists(\PHPUnit\Framework\Assert::class)) {
+            \PHPUnit\Framework\Assert::assertSame($expected, $actual, $message);
+
+            return;
+        }
+
+        if ($expected !== $actual) {
+            throw new FeederException(message: $message);
+        }
     }
 
     protected function cfg(string $key, mixed $default = null): mixed
