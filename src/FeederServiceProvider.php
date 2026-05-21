@@ -16,11 +16,11 @@ class FeederServiceProvider extends ServiceProvider
             'feeder'
         );
 
-        $this->app->singleton(FeederClient::class, function () {
-            return new FeederClient();
+        $this->app->singleton(FeederManager::class, function () {
+            return new FeederManager();
         });
 
-        $this->app->alias(FeederClient::class, 'feeder');
+        $this->app->alias(FeederManager::class, 'feeder');
     }
 
     public function boot(): void

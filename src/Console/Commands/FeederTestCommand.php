@@ -4,28 +4,34 @@ namespace Novay\Feeder\Console\Commands;
 
 use Illuminate\Console\Command;
 use Novay\Feeder\Exceptions\FeederException;
-use Novay\Feeder\FeederClient;
+use Novay\Feeder\FeederManager;
 use Throwable;
 
 class FeederTestCommand extends Command
 {
     protected $signature = 'feeder:test 
+                            {--connection= : Feeder connection name}
                             {--act=GetProfilPT : Feeder act to test}';
 
     protected $description = 'Test Feeder connection, token retrieval, and a sample Feeder act.';
 
-    public function handle(FeederClient $feeder): int
+    public function handle(FeederManager $feeder): int
     {
+        $connection = $this->option('connection');
         $act = (string) $this->option('act');
+
+        $client = $feeder->connection($connection ?: null);
 
         $this->components->info('Testing Feeder connection...');
 
         try {
-            $token = $feeder->token();
+            $this->components->twoColumnDetail('Connection', $client->getConnectionName());
+
+            $token = $client->token();
 
             $this->components->twoColumnDetail('Token', $this->maskToken($token));
 
-            $response = $feeder->response($act);
+            $response = $client->response($act);
 
             $this->components->twoColumnDetail('Act', $act);
             $this->components->twoColumnDetail('Error Code', (string) data_get($response, 'error_code', '-'));

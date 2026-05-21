@@ -3,21 +3,25 @@
 namespace Novay\Feeder\Console\Commands;
 
 use Illuminate\Console\Command;
-use Novay\Feeder\FeederClient;
+use Novay\Feeder\FeederManager;
 use Throwable;
 
 class FeederTokenCommand extends Command
 {
     protected $signature = 'feeder:token 
+                            {--connection= : Feeder connection name}
                             {--force : Force refresh token}';
 
     protected $description = 'Get cached Feeder token or request a new one.';
 
-    public function handle(FeederClient $feeder): int
+    public function handle(FeederManager $feeder): int
     {
         try {
-            $token = $feeder->token(force: (bool) $this->option('force'));
+            $client = $feeder->connection($this->option('connection') ?: null);
 
+            $token = $client->token(force: (bool) $this->option('force'));
+
+            $this->components->twoColumnDetail('Connection', $client->getConnectionName());
             $this->components->twoColumnDetail('Token', $this->maskToken($token));
             $this->components->info('Token is available.');
 

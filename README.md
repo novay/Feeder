@@ -366,6 +366,61 @@ try {
 
 ---
 
+## Multi Connection
+
+You may configure multiple Feeder connections, for example `live` and `sandbox`.
+
+```env
+FEEDER_CONNECTION=live
+
+FEEDER_LIVE_ENDPOINT=http://185.201.9.10:2200/ws/live2.php
+FEEDER_LIVE_USERNAME=username_live
+FEEDER_LIVE_PASSWORD=password_live
+
+FEEDER_SANDBOX_ENDPOINT=http://sandbox-feeder.test/ws/live2.php
+FEEDER_SANDBOX_USERNAME=username_sandbox
+FEEDER_SANDBOX_PASSWORD=password_sandbox
+```
+
+Use the default connection:
+
+```php
+$profil = Feeder::post('GetProfilPT');
+```
+
+Use a specific connection:
+
+```php
+$profil = Feeder::connection('live')->post('GetProfilPT');
+
+$profilSandbox = Feeder::connection('sandbox')->post('GetProfilPT');
+```
+
+Get token for a specific connection:
+
+```php
+$token = Feeder::connection('live')->token();
+```
+
+Clear token for a specific connection:
+
+```php
+Feeder::connection('sandbox')->clearToken();
+```
+
+Artisan commands also support connection option:
+
+```bash
+php artisan feeder:test --connection=live
+php artisan feeder:test --connection=sandbox
+
+php artisan feeder:token --connection=sandbox --force
+
+php artisan feeder:clear-token --connection=live
+```
+
+---
+
 ## Security Notes
 
 Do not hardcode Feeder username, password, or token inside Livewire components, controllers, or Blade files.
@@ -396,7 +451,7 @@ If the application receives concurrent requests, the package uses Laravel cache 
 - [✅] `php artisan feeder:clear-token`
 - [✅] Request logging with sensitive data masking
 - [✅] Retry and backoff configuration
-- [ ] Multi connection support
+- [✅] Multi connection support
 - [ ] Feeder fake for tests
 - [ ] Pagination helper
 - [ ] Typed exceptions

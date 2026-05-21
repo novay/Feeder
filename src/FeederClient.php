@@ -12,29 +12,23 @@ use Throwable;
 
 class FeederClient
 {
-    /**
-     * Mengembalikan langsung isi "data" dari response Feeder.
-     */
+    public function __construct(
+        protected string $connection,
+        protected array $config,
+    ) {}
+
     public function post(string $act, array $payload = []): array
     {
         return data_get($this->response($act, $payload), 'data', []);
     }
 
-    /**
-     * Mengembalikan response penuh dari Feeder:
-     *
-     * [
-     *     "error_code" => 0,
-     *     "error_desc" => "",
-     *     "data" => [...]
-     * ]
-     */
     public function response(string $act, array $payload = []): array
     {
         $response = $this->sendWithToken($act, $payload);
 
         if ($this->shouldRefreshToken($response)) {
             $this->logWarning('Feeder token rejected. Refreshing token and retrying request.', [
+                'connection' => $this->connection,
                 'act' => $act,
                 'error_code' => data_get($response, 'error_code'),
                 'error_desc' => data_get($response, 'error_desc'),
@@ -50,10 +44,6 @@ class FeederClient
         return $response;
     }
 
-    /**
-     * Ambil token dari cache.
-     * Jika tidak ada, ambil token baru dari Feeder.
-     */
     public function token(bool $force = false): string
     {
         if ($force) {
@@ -86,7 +76,14 @@ class FeederClient
     {
         Cache::forget($this->tokenCacheKey());
 
-        $this->logInfo('Feeder cached token cleared.');
+        $this->logInfo('Feeder cached token cleared.', [
+            'connection' => $this->connection,
+        ]);
+    }
+
+    public function getConnectionName(): string
+    {
+        return $this->connection;
     }
 
     protected function sendWithToken(string $act, array $payload = [], bool $forceNewToken = false): array
@@ -95,9 +92,6 @@ class FeederClient
 
         $token = $this->token($forceNewToken);
 
-        /*
-         * act dan token diletakkan terakhir agar tidak tertimpa payload.
-         */
         $body = array_merge($payload, [
             'act' => $act,
             'token' => $token,
@@ -106,12 +100,11 @@ class FeederClient
         try {
             $response = $this->http()->post($this->endpoint(), $body);
 
-            $durationMs = $this->durationMs($startedAt);
-
             $this->logInfo('Feeder request completed.', [
+                'connection' => $this->connection,
                 'act' => $act,
                 'http_status' => $response->status(),
-                'duration_ms' => $durationMs,
+                'duration_ms' => $this->durationMs($startedAt),
                 'force_new_token' => $forceNewToken,
             ]);
 
@@ -125,11 +118,10 @@ class FeederClient
 
             return $this->jsonResponse($response->json());
         } catch (Throwable $e) {
-            $durationMs = $this->durationMs($startedAt);
-
             $this->logWarning('Feeder request failed.', [
+                'connection' => $this->connection,
                 'act' => $act,
-                'duration_ms' => $durationMs,
+                'duration_ms' => $this->durationMs($startedAt),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
             ]);
@@ -151,12 +143,11 @@ class FeederClient
                 'password' => $this->password(),
             ]);
 
-            $durationMs = $this->durationMs($startedAt);
-
             $this->logInfo('Feeder token request completed.', [
+                'connection' => $this->connection,
                 'act' => 'getToken',
                 'http_status' => $response->status(),
-                'duration_ms' => $durationMs,
+                'duration_ms' => $this->durationMs($startedAt),
             ]);
 
             if ($response->failed()) {
@@ -189,16 +180,16 @@ class FeederClient
             );
 
             $this->logInfo('Feeder token cached.', [
+                'connection' => $this->connection,
                 'ttl_seconds' => $ttl,
             ]);
 
             return $token;
         } catch (Throwable $e) {
-            $durationMs = $this->durationMs($startedAt);
-
             $this->logWarning('Feeder token request failed.', [
+                'connection' => $this->connection,
                 'act' => 'getToken',
-                'duration_ms' => $durationMs,
+                'duration_ms' => $this->durationMs($startedAt),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
             ]);
@@ -324,7 +315,13 @@ class FeederClient
     {
         if (blank($this->username()) || blank($this->password())) {
             throw new FeederException(
-                message: 'Username atau password Feeder belum dikonfigurasi.'
+                message: "Username atau password Feeder untuk connection [{$this->connection}] belum dikonfigurasi."
+            );
+        }
+
+        if (blank($this->endpoint())) {
+            throw new FeederException(
+                message: "Endpoint Feeder untuk connection [{$this->connection}] belum dikonfigurasi."
             );
         }
     }
@@ -384,93 +381,107 @@ class FeederClient
         return $context;
     }
 
-    protected function endpoint(): string
+    protected function cfg(string $key, mixed $default = null): mixed
     {
-        return (string) config('feeder.endpoint');
+        return data_get($this->config, $key, $default);
+    }
+
+    protected function replaceConnectionPlaceholder(string $value): string
+    {
+        return str_replace('{connection}', $this->connection, $value);
+    }
+
+    protected function endpoint(): ?string
+    {
+        return $this->cfg('endpoint');
     }
 
     protected function username(): ?string
     {
-        return config('feeder.username');
+        return $this->cfg('username');
     }
 
     protected function password(): ?string
     {
-        return config('feeder.password');
+        return $this->cfg('password');
     }
 
     protected function tokenCacheKey(): string
     {
-        return (string) config('feeder.token.cache_key', 'feeder:token');
+        return $this->replaceConnectionPlaceholder(
+            (string) $this->cfg('token.cache_key', 'feeder:{connection}:token')
+        );
     }
 
     protected function tokenLockKey(): string
     {
-        return (string) config('feeder.token.lock_key', 'feeder:token:lock');
+        return $this->replaceConnectionPlaceholder(
+            (string) $this->cfg('token.lock_key', 'feeder:{connection}:token:lock')
+        );
     }
 
     protected function tokenLockSeconds(): int
     {
-        return (int) config('feeder.token.lock_seconds', 10);
+        return (int) $this->cfg('token.lock_seconds', 10);
     }
 
     protected function tokenLockWaitSeconds(): int
     {
-        return (int) config('feeder.token.lock_wait_seconds', 5);
+        return (int) $this->cfg('token.lock_wait_seconds', 5);
     }
 
     protected function fallbackTokenTtl(): int
     {
-        return (int) config('feeder.token.ttl', 3600);
+        return (int) $this->cfg('token.ttl', 3600);
     }
 
     protected function tokenLeeway(): int
     {
-        return (int) config('feeder.token.leeway', 60);
+        return (int) $this->cfg('token.leeway', 60);
     }
 
     protected function httpTimeout(): int
     {
-        return (int) config('feeder.http.timeout', 30);
+        return (int) $this->cfg('http.timeout', 30);
     }
 
     protected function httpConnectTimeout(): int
     {
-        return (int) config('feeder.http.connect_timeout', 10);
+        return (int) $this->cfg('http.connect_timeout', 10);
     }
 
     protected function httpAsForm(): bool
     {
-        return (bool) config('feeder.http.as_form', true);
+        return (bool) $this->cfg('http.as_form', true);
     }
 
     protected function httpRetryTimes(): int
     {
-        return (int) config('feeder.http.retry.times', 2);
+        return (int) $this->cfg('http.retry.times', 2);
     }
 
     protected function httpRetrySleep(): int
     {
-        return (int) config('feeder.http.retry.sleep', 300);
+        return (int) $this->cfg('http.retry.sleep', 300);
     }
 
     protected function loggingEnabled(): bool
     {
-        return (bool) config('feeder.logging.enabled', true);
+        return (bool) $this->cfg('logging.enabled', true);
     }
 
     protected function logChannel(): string
     {
-        return (string) config('feeder.logging.channel', config('logging.default', 'stack'));
+        return (string) $this->cfg('logging.channel', config('logging.default', 'stack'));
     }
 
     protected function autoRefreshToken(): bool
     {
-        return (bool) config('feeder.auto_refresh_token', true);
+        return (bool) $this->cfg('auto_refresh_token', true);
     }
 
     protected function tokenErrorKeywords(): array
     {
-        return (array) config('feeder.token_error_keywords', []);
+        return (array) $this->cfg('token_error_keywords', []);
     }
 }

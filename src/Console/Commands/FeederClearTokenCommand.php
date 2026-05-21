@@ -3,20 +3,31 @@
 namespace Novay\Feeder\Console\Commands;
 
 use Illuminate\Console\Command;
-use Novay\Feeder\FeederClient;
+use Novay\Feeder\FeederManager;
+use Throwable;
 
 class FeederClearTokenCommand extends Command
 {
-    protected $signature = 'feeder:clear-token';
+    protected $signature = 'feeder:clear-token 
+                            {--connection= : Feeder connection name}';
 
     protected $description = 'Clear cached Feeder token.';
 
-    public function handle(FeederClient $feeder): int
+    public function handle(FeederManager $feeder): int
     {
-        $feeder->clearToken();
+        try {
+            $client = $feeder->connection($this->option('connection') ?: null);
 
-        $this->components->info('Cached Feeder token cleared.');
+            $client->clearToken();
 
-        return self::SUCCESS;
+            $this->components->twoColumnDetail('Connection', $client->getConnectionName());
+            $this->components->info('Cached Feeder token cleared.');
+
+            return self::SUCCESS;
+        } catch (Throwable $e) {
+            $this->components->error($e->getMessage());
+
+            return self::FAILURE;
+        }
     }
 }

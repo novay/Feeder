@@ -85,7 +85,7 @@ return [
 
     'connections' => [
         'live' => [
-            'endpoint' => env('FEEDER_LIVE_ENDPOINT', env('FEEDER_ENDPOINT', 'http://185.201.9.10:2200/ws/live2.php')),
+            'endpoint' => env('FEEDER_LIVE_ENDPOINT', env('FEEDER_ENDPOINT', 'http://IP:PORT/ws/live2.php')),
             'username' => env('FEEDER_LIVE_USERNAME', env('FEEDER_USERNAME')),
             'password' => env('FEEDER_LIVE_PASSWORD', env('FEEDER_PASSWORD')),
         ],
