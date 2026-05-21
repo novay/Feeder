@@ -3,58 +3,60 @@
 return [
     /*
     |--------------------------------------------------------------------------
-    | Feeder Endpoint
+    | Default Connection
     |--------------------------------------------------------------------------
     */
 
-    'endpoint' => env('FEEDER_ENDPOINT', 'http://185.201.9.10:2200/ws/live2.php'),
+    'default' => env('FEEDER_CONNECTION', 'live'),
 
     /*
     |--------------------------------------------------------------------------
-    | Feeder Credential
+    | Shared Token Defaults
     |--------------------------------------------------------------------------
-    */
-
-    'username' => env('FEEDER_USERNAME'),
-    'password' => env('FEEDER_PASSWORD'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Token Cache
-    |--------------------------------------------------------------------------
+    |
+    | {connection} akan otomatis diganti menjadi nama connection.
+    | Contoh:
+    | feeder:live:token
+    | feeder:sandbox:token
+    |
     */
 
     'token' => [
-        'cache_key' => env('FEEDER_TOKEN_CACHE_KEY', 'feeder:token'),
-
-        // Dipakai bila token JWT tidak memiliki klaim exp.
+        'cache_key' => env('FEEDER_TOKEN_CACHE_KEY', 'feeder:{connection}:token'),
         'ttl' => (int) env('FEEDER_TOKEN_TTL', 3600),
-
-        // Token dianggap hampir kedaluwarsa sekian detik sebelum exp.
         'leeway' => (int) env('FEEDER_TOKEN_LEEWAY', 60),
 
-        // Nama lock agar request paralel tidak mengambil token bersamaan.
-        'lock_key' => env('FEEDER_TOKEN_LOCK_KEY', 'feeder:token:lock'),
-
-        // Durasi lock.
+        'lock_key' => env('FEEDER_TOKEN_LOCK_KEY', 'feeder:{connection}:token:lock'),
         'lock_seconds' => (int) env('FEEDER_TOKEN_LOCK_SECONDS', 10),
-
-        // Maksimal menunggu lock.
         'lock_wait_seconds' => (int) env('FEEDER_TOKEN_LOCK_WAIT_SECONDS', 5),
     ],
 
     /*
     |--------------------------------------------------------------------------
-    | HTTP Options
+    | Shared HTTP Defaults
     |--------------------------------------------------------------------------
     */
 
     'http' => [
         'timeout' => (int) env('FEEDER_TIMEOUT', 30),
         'connect_timeout' => (int) env('FEEDER_CONNECT_TIMEOUT', 10),
-
-        // Feeder umumnya menerima application/x-www-form-urlencoded.
         'as_form' => env('FEEDER_AS_FORM', true),
+
+        'retry' => [
+            'times' => (int) env('FEEDER_RETRY_TIMES', 2),
+            'sleep' => (int) env('FEEDER_RETRY_SLEEP', 300),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Safe Logging
+    |--------------------------------------------------------------------------
+    */
+
+    'logging' => [
+        'enabled' => env('FEEDER_LOGGING_ENABLED', true),
+        'channel' => env('FEEDER_LOG_CHANNEL', env('LOG_CHANNEL', 'stack')),
     ],
 
     /*
@@ -73,5 +75,43 @@ return [
         'kadaluarsa',
         'kedaluwarsa',
         'tidak valid',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Connections
+    |--------------------------------------------------------------------------
+    */
+
+    'connections' => [
+        'live' => [
+            'endpoint' => env('FEEDER_LIVE_ENDPOINT', env('FEEDER_ENDPOINT', 'http://185.201.9.10:2200/ws/live2.php')),
+            'username' => env('FEEDER_LIVE_USERNAME', env('FEEDER_USERNAME')),
+            'password' => env('FEEDER_LIVE_PASSWORD', env('FEEDER_PASSWORD')),
+        ],
+
+        'sandbox' => [
+            'endpoint' => env('FEEDER_SANDBOX_ENDPOINT'),
+            'username' => env('FEEDER_SANDBOX_USERNAME'),
+            'password' => env('FEEDER_SANDBOX_PASSWORD'),
+
+            /*
+            |--------------------------------------------------------------------------
+            | Optional Override
+            |--------------------------------------------------------------------------
+            |
+            | Bagian ini opsional. Jika tidak diisi, sandbox akan memakai default
+            | dari konfigurasi global di atas.
+            |
+            */
+
+            // 'token' => [
+            //     'cache_key' => 'feeder:sandbox:token',
+            // ],
+
+            // 'http' => [
+            //     'timeout' => 60,
+            // ],
+        ],
     ],
 ];

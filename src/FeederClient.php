@@ -5,8 +5,10 @@ namespace Novay\Feeder;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Novay\Feeder\Exceptions\FeederException;
+use Throwable;
 
 class FeederClient
 {
@@ -20,10 +22,11 @@ class FeederClient
 
     /**
      * Mengembalikan response penuh dari Feeder:
+     *
      * [
-     *   "error_code" => 0,
-     *   "error_desc" => "",
-     *   "data" => [...]
+     *     "error_code" => 0,
+     *     "error_desc" => "",
+     *     "data" => [...]
      * ]
      */
     public function response(string $act, array $payload = []): array
@@ -31,6 +34,12 @@ class FeederClient
         $response = $this->sendWithToken($act, $payload);
 
         if ($this->shouldRefreshToken($response)) {
+            $this->logWarning('Feeder token rejected. Refreshing token and retrying request.', [
+                'act' => $act,
+                'error_code' => data_get($response, 'error_code'),
+                'error_desc' => data_get($response, 'error_desc'),
+            ]);
+
             $this->clearToken();
 
             $response = $this->sendWithToken($act, $payload, forceNewToken: true);
@@ -43,7 +52,7 @@ class FeederClient
 
     /**
      * Ambil token dari cache.
-     * Bila tidak ada, ambil token baru dari Feeder.
+     * Jika tidak ada, ambil token baru dari Feeder.
      */
     public function token(bool $force = false): string
     {
@@ -53,16 +62,20 @@ class FeederClient
 
         $cacheKey = $this->tokenCacheKey();
 
-        if (! $force && filled(Cache::get($cacheKey))) {
-            return Cache::get($cacheKey);
+        $cachedToken = Cache::get($cacheKey);
+
+        if (! $force && filled($cachedToken)) {
+            return $cachedToken;
         }
 
         return Cache::lock(
             $this->tokenLockKey(),
             $this->tokenLockSeconds()
         )->block($this->tokenLockWaitSeconds(), function () use ($force, $cacheKey) {
-            if (! $force && filled(Cache::get($cacheKey))) {
-                return Cache::get($cacheKey);
+            $cachedToken = Cache::get($cacheKey);
+
+            if (! $force && filled($cachedToken)) {
+                return $cachedToken;
             }
 
             return $this->requestNewToken();
@@ -72,79 +85,137 @@ class FeederClient
     public function clearToken(): void
     {
         Cache::forget($this->tokenCacheKey());
+
+        $this->logInfo('Feeder cached token cleared.');
     }
 
     protected function sendWithToken(string $act, array $payload = [], bool $forceNewToken = false): array
     {
+        $startedAt = microtime(true);
+
         $token = $this->token($forceNewToken);
 
         /*
-         * act dan token sengaja diletakkan terakhir
-         * agar tidak tertimpa oleh payload dari pemanggil.
+         * act dan token diletakkan terakhir agar tidak tertimpa payload.
          */
         $body = array_merge($payload, [
             'act' => $act,
             'token' => $token,
         ]);
 
-        $response = $this->http()->post($this->endpoint(), $body);
+        try {
+            $response = $this->http()->post($this->endpoint(), $body);
 
-        if ($response->failed()) {
-            throw new FeederException(
-                message: 'Gagal menghubungi API Feeder. HTTP Status: ' . $response->status(),
-                response: $response->json(),
-                code: $response->status(),
-            );
+            $durationMs = $this->durationMs($startedAt);
+
+            $this->logInfo('Feeder request completed.', [
+                'act' => $act,
+                'http_status' => $response->status(),
+                'duration_ms' => $durationMs,
+                'force_new_token' => $forceNewToken,
+            ]);
+
+            if ($response->failed()) {
+                throw new FeederException(
+                    message: 'Gagal menghubungi API Feeder. HTTP Status: ' . $response->status(),
+                    response: $this->safeJson($response->json()),
+                    code: $response->status(),
+                );
+            }
+
+            return $this->jsonResponse($response->json());
+        } catch (Throwable $e) {
+            $durationMs = $this->durationMs($startedAt);
+
+            $this->logWarning('Feeder request failed.', [
+                'act' => $act,
+                'duration_ms' => $durationMs,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
         }
-
-        return $this->jsonResponse($response->json());
     }
 
     protected function requestNewToken(): string
     {
         $this->validateCredential();
 
-        $response = $this->http()->post($this->endpoint(), [
-            'act' => 'getToken',
-            'username' => $this->username(),
-            'password' => $this->password(),
-        ]);
+        $startedAt = microtime(true);
 
-        if ($response->failed()) {
-            throw new FeederException(
-                message: 'Gagal mengambil token Feeder. HTTP Status: ' . $response->status(),
-                response: $response->json(),
-                code: $response->status(),
+        try {
+            $response = $this->http()->post($this->endpoint(), [
+                'act' => 'getToken',
+                'username' => $this->username(),
+                'password' => $this->password(),
+            ]);
+
+            $durationMs = $this->durationMs($startedAt);
+
+            $this->logInfo('Feeder token request completed.', [
+                'act' => 'getToken',
+                'http_status' => $response->status(),
+                'duration_ms' => $durationMs,
+            ]);
+
+            if ($response->failed()) {
+                throw new FeederException(
+                    message: 'Gagal mengambil token Feeder. HTTP Status: ' . $response->status(),
+                    response: $this->safeJson($response->json()),
+                    code: $response->status(),
+                );
+            }
+
+            $json = $this->jsonResponse($response->json());
+
+            $this->throwIfFeederError($json);
+
+            $token = data_get($json, 'data.token');
+
+            if (blank($token) || ! is_string($token)) {
+                throw new FeederException(
+                    message: 'Token tidak ditemukan pada response Feeder.',
+                    response: $this->safeJson($json),
+                );
+            }
+
+            $ttl = $this->resolveTokenTtl($token);
+
+            Cache::put(
+                $this->tokenCacheKey(),
+                $token,
+                now()->addSeconds($ttl)
             );
+
+            $this->logInfo('Feeder token cached.', [
+                'ttl_seconds' => $ttl,
+            ]);
+
+            return $token;
+        } catch (Throwable $e) {
+            $durationMs = $this->durationMs($startedAt);
+
+            $this->logWarning('Feeder token request failed.', [
+                'act' => 'getToken',
+                'duration_ms' => $durationMs,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
         }
-
-        $json = $this->jsonResponse($response->json());
-
-        $this->throwIfFeederError($json);
-
-        $token = data_get($json, 'data.token');
-
-        if (blank($token) || ! is_string($token)) {
-            throw new FeederException(
-                message: 'Token tidak ditemukan pada response Feeder.',
-                response: $json,
-            );
-        }
-
-        Cache::put(
-            $this->tokenCacheKey(),
-            $token,
-            now()->addSeconds($this->resolveTokenTtl($token))
-        );
-
-        return $token;
     }
 
     protected function http(): PendingRequest
     {
         $request = Http::acceptJson()
             ->timeout($this->httpTimeout())
-            ->connectTimeout($this->httpConnectTimeout());
+            ->connectTimeout($this->httpConnectTimeout())
+            ->retry(
+                $this->httpRetryTimes(),
+                $this->httpRetrySleep()
+            );
 
         if ($this->httpAsForm()) {
             $request = $request->asForm();
@@ -164,6 +235,15 @@ class FeederClient
         return $json;
     }
 
+    protected function safeJson(mixed $json): ?array
+    {
+        if (! is_array($json)) {
+            return null;
+        }
+
+        return $this->sanitizeLogContext($json);
+    }
+
     protected function throwIfFeederError(array $response): void
     {
         $errorCode = (int) data_get($response, 'error_code', 0);
@@ -175,7 +255,7 @@ class FeederClient
         throw new FeederException(
             message: data_get($response, 'error_desc') ?: 'API Feeder mengembalikan error.',
             feederErrorCode: $errorCode,
-            response: $response,
+            response: $this->safeJson($response),
         );
     }
 
@@ -249,6 +329,61 @@ class FeederClient
         }
     }
 
+    protected function durationMs(float $startedAt): float
+    {
+        return round((microtime(true) - $startedAt) * 1000, 2);
+    }
+
+    protected function logInfo(string $message, array $context = []): void
+    {
+        if (! $this->loggingEnabled()) {
+            return;
+        }
+
+        Log::channel($this->logChannel())->info(
+            $message,
+            $this->sanitizeLogContext($context)
+        );
+    }
+
+    protected function logWarning(string $message, array $context = []): void
+    {
+        if (! $this->loggingEnabled()) {
+            return;
+        }
+
+        Log::channel($this->logChannel())->warning(
+            $message,
+            $this->sanitizeLogContext($context)
+        );
+    }
+
+    protected function sanitizeLogContext(array $context): array
+    {
+        $sensitiveKeys = [
+            'token',
+            'username',
+            'password',
+            'authorization',
+            'body',
+            'payload',
+        ];
+
+        foreach ($context as $key => $value) {
+            if (in_array(Str::lower((string) $key), $sensitiveKeys, true)) {
+                $context[$key] = '[redacted]';
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $context[$key] = $this->sanitizeLogContext($value);
+            }
+        }
+
+        return $context;
+    }
+
     protected function endpoint(): string
     {
         return (string) config('feeder.endpoint');
@@ -307,6 +442,26 @@ class FeederClient
     protected function httpAsForm(): bool
     {
         return (bool) config('feeder.http.as_form', true);
+    }
+
+    protected function httpRetryTimes(): int
+    {
+        return (int) config('feeder.http.retry.times', 2);
+    }
+
+    protected function httpRetrySleep(): int
+    {
+        return (int) config('feeder.http.retry.sleep', 300);
+    }
+
+    protected function loggingEnabled(): bool
+    {
+        return (bool) config('feeder.logging.enabled', true);
+    }
+
+    protected function logChannel(): string
+    {
+        return (string) config('feeder.logging.channel', config('logging.default', 'stack'));
     }
 
     protected function autoRefreshToken(): bool

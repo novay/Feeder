@@ -1,6 +1,6 @@
 {
     "name": "novay/feeder",
-    "description": "Laravel client for Feeder API with automatic token caching and refresh.",
+    "description": "Laravel client for Feeder API with automatic token caching, refresh, retry, safe logging, and Artisan commands.",
     "type": "library",
     "license": "MIT",
     "autoload": {
@@ -12,7 +12,9 @@
         "php": "^8.2",
         "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
         "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
-        "illuminate/cache": "^10.0|^11.0|^12.0|^13.0"
+        "illuminate/cache": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/console": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/log": "^10.0|^11.0|^12.0|^13.0"
     },
     "extra": {
         "laravel": {

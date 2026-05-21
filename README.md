@@ -157,9 +157,6 @@ The package will automatically append the token:
 [
     'act' => 'GetListMahasiswa',
     'token' => '...',
-    'filter' => "...",
-    'limit' => 20,
-    'offset' => 0,
 ]
 ```
 
@@ -186,6 +183,55 @@ Feeder::clearToken();
 ```
 
 Token is stored using Laravel cache. If the token is a JWT and contains an `exp` claim, the package will use the JWT expiration time. Otherwise, it will use `FEEDER_TOKEN_TTL`.
+
+## Artisan Commands
+
+Test Feeder:
+
+```bash
+php artisan feeder:test
+```
+
+Test specific act:
+
+```bash
+php artisan feeder:test --act=GetProfilPT
+```
+
+Show masked token:
+
+```bash
+php artisan feeder:token
+```
+
+Force refresh token:
+
+```bash
+php artisan feeder:token --force
+```
+
+Clear cached token:
+
+```bash
+php artisan feeder:clear-token
+```
+
+---
+
+## Logging
+
+The package logs request status, duration, act name, and exception class.
+
+Sensitive values are redacted:
+
+- token
+- username
+- password
+- authorization
+- body
+- payload
+
+The package never intentionally logs full Feeder credentials or token.
 
 ---
 
@@ -333,13 +379,6 @@ FEEDER_PASSWORD=your_password
 
 If your Feeder endpoint still uses HTTP instead of HTTPS, avoid calling it from public or untrusted networks. Prefer server-to-server access from a trusted network, VPN, internal network, or reverse proxy.
 
-Never log:
-
-- Feeder password
-- Feeder username
-- Feeder token
-- Full request body containing token
-
 ---
 
 ## Recommended Production Cache Driver
@@ -352,11 +391,11 @@ If the application receives concurrent requests, the package uses Laravel cache 
 
 ## Roadmap
 
-- [ ] `php artisan feeder:test`
-- [ ] `php artisan feeder:token`
-- [ ] `php artisan feeder:clear-token`
-- [ ] Request logging with sensitive data masking
-- [ ] Retry and backoff configuration
+- [✅] `php artisan feeder:test`
+- [✅] `php artisan feeder:token`
+- [✅] `php artisan feeder:clear-token`
+- [✅] Request logging with sensitive data masking
+- [✅] Retry and backoff configuration
 - [ ] Multi connection support
 - [ ] Feeder fake for tests
 - [ ] Pagination helper
