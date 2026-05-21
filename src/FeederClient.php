@@ -303,14 +303,14 @@ class FeederClient
 
         try {
             $response = $this->http()->post($this->endpoint(), [
-                'act' => 'getToken',
+                'act' => 'GetToken',
                 'username' => $this->username(),
                 'password' => $this->password(),
             ]);
 
             $this->logInfo('Feeder token request completed.', [
                 'connection' => $this->connection,
-                'act' => 'getToken',
+                'act' => 'GetToken',
                 'http_status' => $response->status(),
                 'duration_ms' => $this->durationMs($startedAt),
             ]);
@@ -319,15 +319,15 @@ class FeederClient
                 throw new FeederConnectionException(
                     message: 'Gagal mengambil token Feeder. HTTP Status: ' . $response->status(),
                     connection: $this->connection,
-                    act: 'getToken',
+                    act: 'GetToken',
                     response: $this->safeJson($response->json()),
                     code: $response->status(),
                 );
             }
 
-            $json = $this->jsonResponse($response->json(), 'getToken');
+            $json = $this->jsonResponse($response->json(), 'GetToken');
 
-            $this->throwIfFeederError($json, 'getToken');
+            $this->throwIfFeederError($json, 'GetToken');
 
             $token = data_get($json, 'data.token');
 
@@ -335,7 +335,7 @@ class FeederClient
                 throw new FeederTokenException(
                     message: 'Token tidak ditemukan pada response Feeder.',
                     connection: $this->connection,
-                    act: 'getToken',
+                    act: 'GetToken',
                     response: $this->safeJson($json),
                 );
             }
@@ -357,7 +357,7 @@ class FeederClient
         } catch (FeederException $e) {
             $this->logWarning('Feeder token request failed.', [
                 'connection' => $this->connection,
-                'act' => 'getToken',
+                'act' => 'GetToken',
                 'duration_ms' => $this->durationMs($startedAt),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
@@ -367,7 +367,7 @@ class FeederClient
         } catch (LaravelConnectionException | LaravelRequestException $e) {
             $this->logWarning('Feeder token HTTP client failed.', [
                 'connection' => $this->connection,
-                'act' => 'getToken',
+                'act' => 'GetToken',
                 'duration_ms' => $this->durationMs($startedAt),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
@@ -376,7 +376,7 @@ class FeederClient
             throw new FeederConnectionException(
                 message: 'Gagal terhubung ke API Feeder saat mengambil token: ' . $e->getMessage(),
                 connection: $this->connection,
-                act: 'getToken',
+                act: 'GetToken',
                 context: [
                     'endpoint' => $this->endpoint(),
                     'exception' => $e::class,
@@ -386,7 +386,7 @@ class FeederClient
         } catch (Throwable $e) {
             $this->logWarning('Unexpected Feeder token failure.', [
                 'connection' => $this->connection,
-                'act' => 'getToken',
+                'act' => 'GetToken',
                 'duration_ms' => $this->durationMs($startedAt),
                 'exception' => $e::class,
                 'message' => $e->getMessage(),
@@ -395,7 +395,7 @@ class FeederClient
             throw new FeederTokenException(
                 message: 'Terjadi kesalahan saat mengambil token Feeder: ' . $e->getMessage(),
                 connection: $this->connection,
-                act: 'getToken',
+                act: 'GetToken',
                 context: [
                     'endpoint' => $this->endpoint(),
                     'exception' => $e::class,
@@ -409,11 +409,14 @@ class FeederClient
     {
         $request = Http::acceptJson()
             ->timeout($this->httpTimeout())
-            ->connectTimeout($this->httpConnectTimeout())
-            ->retry(
+            ->connectTimeout($this->httpConnectTimeout());
+
+        if ($this->httpRetryTimes() > 0) {
+            $request = $request->retry(
                 $this->httpRetryTimes(),
                 $this->httpRetrySleep()
             );
+        }
 
         if ($this->httpAsForm()) {
             $request = $request->asForm();
@@ -454,7 +457,7 @@ class FeederClient
 
         $message = data_get($response, 'error_desc') ?: 'API Feeder mengembalikan error.';
 
-        if ($act === 'getToken' || $this->isAuthenticationErrorResponse($response)) {
+        if ($act === 'GetToken' || $this->isAuthenticationErrorResponse($response)) {
             throw new FeederAuthenticationException(
                 message: $message,
                 connection: $this->connection,
@@ -573,7 +576,7 @@ class FeederClient
             throw new FeederConnectionException(
                 message: "Endpoint Feeder untuk connection [{$this->connection}] belum dikonfigurasi.",
                 connection: $this->connection,
-                act: 'getToken',
+                act: 'GetToken',
             );
         }
 
@@ -581,7 +584,7 @@ class FeederClient
             throw new FeederAuthenticationException(
                 message: "Username atau password Feeder untuk connection [{$this->connection}] belum dikonfigurasi.",
                 connection: $this->connection,
-                act: 'getToken',
+                act: 'GetToken',
             );
         }
     }
