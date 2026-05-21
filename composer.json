@@ -1,0 +1,29 @@
+{
+    "name": "novay/feeder",
+    "description": "Laravel client for Feeder API with automatic token caching and refresh.",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Novay\\Feeder\\": "src/"
+        }
+    },
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/http": "^10.0|^11.0|^12.0|^13.0",
+        "illuminate/cache": "^10.0|^11.0|^12.0|^13.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Novay\\Feeder\\FeederServiceProvider"
+            ],
+            "aliases": {
+                "Feeder": "Novay\\Feeder\\Facades\\Feeder"
+            }
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
